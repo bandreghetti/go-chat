@@ -1,0 +1,29 @@
+version: '2'
+
+networks:
+  chat-net:
+
+services:
+  chat-server:
+    container_name: chat-server
+    image: golang
+    working_dir: /server
+    command: go run main.go
+    volumes:
+    - ./server:/server
+    networks:
+      - chat-net
+    ports:
+      - 6174:6174
+
+  client0:
+    container_name: client0
+    image: golang
+    working_dir: /client
+    command: go run main.go
+    volumes:
+    - ./client:/client
+    networks:
+      - chat-net
+    ports:
+      - 3566:3566
