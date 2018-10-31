@@ -5,17 +5,32 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"time"
+	"os"
+
+	"./validation"
 )
 
 const (
 	serverAddr = "chat-server"
 	serverPort = "6174"
+	loginMenu  = "Please choose an username:"
+	welcomeMsg = "Welcome, %s!\n"
 )
 
 func main() {
-	for i := 0; ; i++ {
-		time.Sleep(time.Second)
+	var username string
+	scanner := bufio.NewScanner(os.Stdin)
+	for !validation.ValidUsername(username) {
+		fmt.Println(loginMenu)
+		scanner.Scan()
+		username = scanner.Text()
+	}
+
+	fmt.Printf(welcomeMsg, username)
+
+	for {
+		var msg string
+		fmt.Scanln(&msg)
 		// Connect to server
 		conn, err := net.Dial("tcp", serverAddr+":"+serverPort)
 		if err != nil {
@@ -23,7 +38,7 @@ func main() {
 			continue
 		}
 		// send to socket
-		fmt.Fprintf(conn, "test-message %d\n", i)
+		fmt.Fprintf(conn, "%s\n", msg)
 		// listen for reply
 		message, _ := bufio.NewReader(conn).ReadString('\n')
 		fmt.Print("Message from server: " + message)

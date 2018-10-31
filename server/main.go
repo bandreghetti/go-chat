@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	serverPort = ":6174"
+	serverPort = "chat-server:6174"
 	connType   = "tcp"
 )
 

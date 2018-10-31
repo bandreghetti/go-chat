@@ -16,8 +16,10 @@ services:
     ports:
       - 6174:6174
 
-  client0:
-    container_name: client0
+  chat-client:
+    stdin_open: true
+    tty: true
+    container_name: chat-${CHAT_USERNAME}
     image: golang
     working_dir: /client
     command: go run main.go
@@ -25,5 +27,3 @@ services:
     - ./client:/client
     networks:
       - chat-net
-    ports:
-      - 3566:3566
