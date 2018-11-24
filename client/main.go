@@ -2,12 +2,13 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
 
-	"./validation"
+	"github.com/bandreghetti/go-chat/msgs"
 )
 
 const (
@@ -17,30 +18,44 @@ const (
 	welcomeMsg = "Welcome, %s!\n"
 )
 
+func sendMsg(message msgs.ChatMsg) msgs.ChatMsg {
+	msgJSON, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("Error generating msgJSON: %s", err.Error())
+		os.Exit(1)
+	}
+	// Connect to server
+	conn, err := net.Dial("tcp", serverAddr+":"+serverPort)
+	if err != nil {
+		log.Printf("Error dialing server: %s", err.Error())
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	// Write to socket
+	conn.Write(msgJSON)
+
+	// Listen for reply
+	var recvMsg msgs.ChatMsg
+	json.NewDecoder(conn).Decode(&recvMsg)
+	return recvMsg
+}
+
 func main() {
 	var username string
 	scanner := bufio.NewScanner(os.Stdin)
-	for !validation.ValidUsername(username) {
+	var response msgs.ChatMsg
+	for response.Status != msgs.StatusOK {
 		fmt.Println(loginMenu)
 		scanner.Scan()
 		username = scanner.Text()
+
+		login := msgs.ChatMsg{
+			Command: msgs.CmdLogin,
+			Payload: []byte(username),
+		}
+		response = sendMsg(login)
 	}
 
 	fmt.Printf(welcomeMsg, username)
-
-	for {
-		var msg string
-		fmt.Scanln(&msg)
-		// Connect to server
-		conn, err := net.Dial("tcp", serverAddr+":"+serverPort)
-		if err != nil {
-			log.Printf("error dialing server: %s", err.Error())
-			continue
-		}
-		// send to socket
-		fmt.Fprintf(conn, "%s\n", msg)
-		// listen for reply
-		message, _ := bufio.NewReader(conn).ReadString('\n')
-		fmt.Print("Message from server: " + message)
-	}
 }

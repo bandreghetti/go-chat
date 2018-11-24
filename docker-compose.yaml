@@ -7,10 +7,11 @@ services:
   chat-server:
     container_name: chat-server
     image: golang
-    working_dir: /server
-    command: go run main.go
+    working_dir: /go/src/github.com/bandreghetti/go-chat/server
+    command: go run .
     volumes:
-    - ./server:/server
+    - ./server:/go/src/github.com/bandreghetti/go-chat/server
+    - ./msgs:/go/src/github.com/bandreghetti/go-chat/msgs
     networks:
       - chat-net
     ports:
@@ -21,9 +22,10 @@ services:
     tty: true
     container_name: chat-${CHAT_USERNAME}
     image: golang
-    working_dir: /client
+    working_dir: /go/src/github.com/bandreghetti/go-chat/client
     command: go run main.go
     volumes:
-    - ./client:/client
+    - ./client:/go/src/github.com/bandreghetti/go-chat/client
+    - ./msgs:/go/src/github.com/bandreghetti/go-chat/msgs
     networks:
       - chat-net
