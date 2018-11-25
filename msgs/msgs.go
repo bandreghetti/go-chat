@@ -16,12 +16,20 @@ const (
 	CmdLogin int = iota + 1
 	CmdList
 	CmdJoin
+	CmdMsg
+	CmdFetch
+	CmdGetMsgIdx
+	CmdLeave
+	CmdCreateRoom
+	CmdLogout
 )
 
 //Response Status code definitions
 const (
 	StatusOK int = iota + 1
 	StatusInexistentRoom
+	StatusUserNotInRoom
+	StatusRoomAlreadyExists
 )
 
 func (msg ChatMsg) String() string {

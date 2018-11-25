@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"log"
 	"net"
@@ -39,6 +40,7 @@ func main() {
 		roomName:  "general",
 		userCount: 0,
 	}
+	rooms["general"].users = make(map[string]struct{})
 
 	// Close the listener object after returning.
 	defer l.Close()
@@ -78,6 +80,18 @@ func handleRequest(conn net.Conn) {
 		list(conn)
 	case msgs.CmdJoin:
 		join(conn, recvMsg)
+	case msgs.CmdMsg:
+		postMsg(conn, recvMsg)
+	case msgs.CmdFetch:
+		fetch(conn, recvMsg)
+	case msgs.CmdGetMsgIdx:
+		getMsgIdx(conn, recvMsg)
+	case msgs.CmdLeave:
+		leave(conn)
+	case msgs.CmdCreateRoom:
+		createRoom(conn, recvMsg)
+	case msgs.CmdLogout:
+		logout(conn)
 	}
 }
 
@@ -89,7 +103,7 @@ func login(conn net.Conn, recvMsg msgs.ChatMsg) {
 	username := string(recvMsg.Payload)
 
 	if !validUsername(username) {
-		// respond with error
+		// TODO: respond with error
 	}
 
 	var response msgs.ChatMsg
@@ -99,7 +113,7 @@ func login(conn net.Conn, recvMsg msgs.ChatMsg) {
 		Status: msgs.StatusOK,
 	}
 	respond(conn, response)
-	log.Printf("%s requested login as %s", requestIP, username)
+	log.Printf("%s logged in as %s", requestIP, username)
 }
 
 func list(conn net.Conn) {
@@ -132,6 +146,153 @@ func join(conn net.Conn, recvMsg msgs.ChatMsg) {
 	ip2roomName[requestIP] = roomName
 	response.Status = msgs.StatusOK
 	respond(conn, response)
+	username := ip2user[requestIP]
+	log.Printf("%s (%s) joined %s\n", username, requestIP, roomName)
+}
+
+func postMsg(conn net.Conn, recvMsg msgs.ChatMsg) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName, ok := ip2roomName[requestIP]
+	if !ok {
+		// TODO: handle error when ip is not in a room
+	}
+
+	r := rooms[roomName]
+
+	status := r.PostMessage(requestIP, string(recvMsg.Payload))
+	response := msgs.ChatMsg{
+		Status: status,
+	}
+	respond(conn, response)
+	username := ip2user[requestIP]
+	log.Printf("%s (%s) posted %s\n", username, requestIP, string(recvMsg.Payload))
+}
+
+func fetch(conn net.Conn, recvMsg msgs.ChatMsg) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName, ok := ip2roomName[requestIP]
+	if !ok {
+		// TODO: handle error when ip is not in a room
+	}
+
+	r := rooms[roomName]
+
+	fromIdx := uint64(binary.LittleEndian.Uint64(recvMsg.Payload))
+	messages, nextIdx := r.FetchMessages(fromIdx)
+	respIdx := make([]byte, 8)
+	binary.LittleEndian.PutUint64(respIdx, nextIdx)
+	payload := append(messages, respIdx...)
+
+	response := msgs.ChatMsg{
+		Status:  msgs.StatusOK,
+		Payload: payload,
+	}
+	respond(conn, response)
+	if fromIdx != nextIdx {
+		username := ip2user[requestIP]
+		log.Printf("%s (%s) got %s room's messages from %d up to message number %d\n", username, requestIP, roomName, fromIdx, nextIdx)
+	}
+}
+
+func getMsgIdx(conn net.Conn, recvMsg msgs.ChatMsg) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName, ok := ip2roomName[requestIP]
+	if !ok {
+		// TODO: handle error when ip is not in a room
+	}
+
+	msgIdx := rooms[roomName].GetMsgIdx()
+
+	payload := make([]byte, 8)
+	binary.LittleEndian.PutUint64(payload, msgIdx)
+	response := msgs.ChatMsg{
+		Status:  msgs.StatusOK,
+		Payload: payload,
+	}
+	respond(conn, response)
+	// log.Printf("%s requested %s's msgIdx and got %d as response %v", ip2user[requestIP], roomName, msgIdx, payload)
+}
+
+func leave(conn net.Conn) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName, ok := ip2roomName[requestIP]
+	if !ok {
+		// TODO: handle error when ip is not in a room
+	}
+
+	r := rooms[roomName]
+
+	r.LeaveUser(requestIP)
+
+	response := msgs.ChatMsg{
+		Status: msgs.StatusOK,
+	}
+	respond(conn, response)
+
+	username := ip2user[requestIP]
+	log.Printf("%s (%s) left %s room\n", username, requestIP, roomName)
+}
+
+func createRoom(conn net.Conn, recvMsg msgs.ChatMsg) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName := string(recvMsg.Payload)
+
+	var response msgs.ChatMsg
+
+	_, roomExists := rooms[roomName]
+	if !roomExists {
+		rooms[roomName] = &room{
+			roomName:  roomName,
+			userCount: 0,
+		}
+		rooms[roomName].users = make(map[string]struct{})
+		response.Status = msgs.StatusOK
+		username := ip2user[requestIP]
+		log.Printf("%s (%s) created a new room named %s\n", username, requestIP, roomName)
+	} else {
+		response.Status = msgs.StatusRoomAlreadyExists
+	}
+
+	respond(conn, response)
+}
+
+func logout(conn net.Conn) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName, inRoom := ip2roomName[requestIP]
+	if inRoom {
+		r := rooms[roomName]
+		r.LeaveUser(requestIP)
+	}
+
+	username := ip2user[requestIP]
+
+	var response msgs.ChatMsg
+	delete(ip2user, requestIP)
+	delete(user2ip, username)
+
+	response = msgs.ChatMsg{
+		Status: msgs.StatusOK,
+	}
+	respond(conn, response)
+	log.Printf("%s (%s) logged out", username, requestIP)
 }
 
 func respond(conn net.Conn, response msgs.ChatMsg) {

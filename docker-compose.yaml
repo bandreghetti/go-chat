@@ -17,10 +17,36 @@ services:
     ports:
       - 6174:6174
 
-  chat-client:
+  chat-alice:
     stdin_open: true
     tty: true
-    container_name: chat-${CHAT_USERNAME}
+    container_name: chat-alice
+    image: golang
+    working_dir: /go/src/github.com/bandreghetti/go-chat/client
+    command: go run main.go
+    volumes:
+    - ./client:/go/src/github.com/bandreghetti/go-chat/client
+    - ./msgs:/go/src/github.com/bandreghetti/go-chat/msgs
+    networks:
+      - chat-net
+
+  chat-bruno:
+    stdin_open: true
+    tty: true
+    container_name: chat-bruno
+    image: golang
+    working_dir: /go/src/github.com/bandreghetti/go-chat/client
+    command: go run main.go
+    volumes:
+    - ./client:/go/src/github.com/bandreghetti/go-chat/client
+    - ./msgs:/go/src/github.com/bandreghetti/go-chat/msgs
+    networks:
+      - chat-net
+
+  chat-caio:
+    stdin_open: true
+    tty: true
+    container_name: chat-caio
     image: golang
     working_dir: /go/src/github.com/bandreghetti/go-chat/client
     command: go run main.go

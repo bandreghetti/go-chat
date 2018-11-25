@@ -10,5 +10,5 @@ export CHAT_USERNAME=$1
 docker stop chat-$CHAT_USERNAME && \
 docker rm chat-$CHAT_USERNAME
 
-docker-compose up -d chat-client && \
+docker-compose up -d chat-$CHAT_USERNAME && \
 docker attach chat-$CHAT_USERNAME
