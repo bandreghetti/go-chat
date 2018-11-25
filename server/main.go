@@ -16,13 +16,16 @@ const (
 	connType   = "tcp"
 )
 
-var ip2user = map[string]string{
-	"127.0.0.1": "server",
-}
-
-var user2ip = map[string]string{
-	"server": "127.0.0.1",
-}
+var (
+	ip2user = map[string]string{
+		"127.0.0.1": "server",
+	}
+	user2ip = map[string]string{
+		"server": "127.0.0.1",
+	}
+	ip2roomName = map[string]string{}
+	rooms       = map[string]*room{}
+)
 
 func main() {
 	// Listen on TCP port serverPort.
@@ -30,6 +33,11 @@ func main() {
 	if err != nil {
 		log.Println("error listening:", err.Error())
 		os.Exit(1)
+	}
+
+	rooms["general"] = &room{
+		roomName:  "general",
+		userCount: 0,
 	}
 
 	// Close the listener object after returning.
@@ -66,6 +74,10 @@ func handleRequest(conn net.Conn) {
 	switch recvMsg.Command {
 	case msgs.CmdLogin:
 		login(conn, recvMsg)
+	case msgs.CmdList:
+		list(conn)
+	case msgs.CmdJoin:
+		join(conn, recvMsg)
 	}
 }
 
@@ -88,6 +100,38 @@ func login(conn net.Conn, recvMsg msgs.ChatMsg) {
 	}
 	respond(conn, response)
 	log.Printf("%s requested login as %s", requestIP, username)
+}
+
+func list(conn net.Conn) {
+	var roomSlice []string
+	for _, room := range rooms {
+		roomSlice = append(roomSlice, room.String())
+	}
+	payload := strings.Join(roomSlice, "\n")
+	response := msgs.ChatMsg{
+		Status:  msgs.StatusOK,
+		Payload: []byte(payload),
+	}
+	respond(conn, response)
+}
+
+func join(conn net.Conn, recvMsg msgs.ChatMsg) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	var response msgs.ChatMsg
+	roomName := string(recvMsg.Payload)
+	_, roomExists := rooms[roomName]
+	if !roomExists {
+		response.Status = msgs.StatusInexistentRoom
+		respond(conn, response)
+		return
+	}
+	rooms[roomName].JoinUser(requestIP)
+	ip2roomName[requestIP] = roomName
+	response.Status = msgs.StatusOK
+	respond(conn, response)
 }
 
 func respond(conn net.Conn, response msgs.ChatMsg) {
