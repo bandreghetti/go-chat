@@ -43,10 +43,10 @@ services:
     networks:
       - chat-net
 
-  chat-caio:
+  chat-celso:
     stdin_open: true
     tty: true
-    container_name: chat-caio
+    container_name: chat-celso
     image: golang
     working_dir: /go/src/github.com/bandreghetti/go-chat/client
     command: go run main.go

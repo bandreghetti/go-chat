@@ -26,10 +26,12 @@ const (
 
 var helpMsg = strings.Join([]string{
 	"Available commands:",
-	"\\list - list available rooms",
-	"\\join - join an existing room",
+	"\\list [room-name] - list available rooms or users in a room",
+	"\\join <room-name> - join an existing room",
 	"\\leave - leave the current room",
-	"\\create - create a new room",
+	"\\create <room-name> - create a new room",
+	"\\delete <room-name> - delete an empty room",
+	"\\logout - terminate the program",
 	"\\help - list available commands",
 }, "\n")
 
@@ -72,6 +74,11 @@ func main() {
 			Payload: []byte(username),
 		}
 		response = sendMsg(request)
+		if response.Status == msgs.StatusInvalidUsername {
+			fmt.Println("Invalid username!")
+		} else if response.Status == msgs.StatusUsernameExists {
+			fmt.Println("Username already exists! Please choose another one.")
+		}
 	}
 
 	fmt.Printf(welcomeMsg, username)
@@ -87,10 +94,23 @@ func main() {
 		if command[0] == '\\' {
 			switch args[0] {
 			case "\\list":
-				request = msgs.ChatMsg{
-					Command: msgs.CmdList,
+				if len(args) == 1 {
+					request = msgs.ChatMsg{
+						Command: msgs.CmdList,
+					}
+				} else if len(args) == 2 {
+					request = msgs.ChatMsg{
+						Command: msgs.CmdListUsers,
+						Payload: []byte(args[1]),
+					}
 				}
 				response = sendMsg(request)
+				if response.Status != msgs.StatusOK {
+					if response.Status == msgs.StatusInexistentRoom {
+						fmt.Printf("Room named %s does not exist\n", args[1])
+					}
+					continue
+				}
 				fmt.Println(string(response.Payload))
 			case "\\join":
 				if len(args) != 2 {
@@ -123,6 +143,52 @@ func main() {
 					Command: msgs.CmdLeave,
 				}
 				sendMsg(request)
+				fmt.Println("You left the room.")
+			case "\\create":
+				if inRoom {
+					fmt.Println("Cannot manage rooms while inside one.")
+					continue
+				}
+				if len(args) != 2 {
+					fmt.Println("Command \\create requires an argument.")
+					continue
+				}
+				request = msgs.ChatMsg{
+					Command: msgs.CmdCreateRoom,
+					Payload: []byte(args[1]),
+				}
+				response = sendMsg(request)
+				if response.Status != msgs.StatusOK {
+					if response.Status == msgs.StatusRoomAlreadyExists {
+						fmt.Printf("Room named %s already exists.\n", args[1])
+					}
+					continue
+				}
+				fmt.Printf("Successfully created room named %s.\n", args[1])
+			case "\\delete":
+				if inRoom {
+					fmt.Println("Cannot manage rooms while inside one.")
+					continue
+				}
+				if len(args) != 2 {
+					fmt.Println("Command \\delete requires an argument")
+					continue
+				}
+				request = msgs.ChatMsg{
+					Command: msgs.CmdDeleteRoom,
+					Payload: []byte(args[1]),
+				}
+				response = sendMsg(request)
+				if response.Status != msgs.StatusOK {
+					if response.Status == msgs.StatusRoomNotEmpty {
+						fmt.Println("Cannot delete a non-empty room!")
+					} else if response.Status == msgs.StatusInexistentRoom {
+						fmt.Printf("Room named %s does not exist.\n", args[1])
+					}
+
+					continue
+				}
+				fmt.Printf("Successfully deleted room named %s.\n", args[1])
 			case "\\logout":
 				request = msgs.ChatMsg{
 					Command: msgs.CmdLogout,

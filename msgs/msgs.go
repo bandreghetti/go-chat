@@ -15,21 +15,26 @@ type ChatMsg struct {
 const (
 	CmdLogin int = iota + 1
 	CmdList
+	CmdListUsers
 	CmdJoin
 	CmdMsg
 	CmdFetch
 	CmdGetMsgIdx
 	CmdLeave
 	CmdCreateRoom
+	CmdDeleteRoom
 	CmdLogout
 )
 
 //Response Status code definitions
 const (
 	StatusOK int = iota + 1
+	StatusUsernameExists
+	StatusInvalidUsername
 	StatusInexistentRoom
 	StatusUserNotInRoom
 	StatusRoomAlreadyExists
+	StatusRoomNotEmpty
 )
 
 func (msg ChatMsg) String() string {

@@ -78,6 +78,8 @@ func handleRequest(conn net.Conn) {
 		login(conn, recvMsg)
 	case msgs.CmdList:
 		list(conn)
+	case msgs.CmdListUsers:
+		listUsers(conn, recvMsg)
 	case msgs.CmdJoin:
 		join(conn, recvMsg)
 	case msgs.CmdMsg:
@@ -90,6 +92,8 @@ func handleRequest(conn net.Conn) {
 		leave(conn)
 	case msgs.CmdCreateRoom:
 		createRoom(conn, recvMsg)
+	case msgs.CmdDeleteRoom:
+		deleteRoom(conn, recvMsg)
 	case msgs.CmdLogout:
 		logout(conn)
 	}
@@ -102,11 +106,25 @@ func login(conn net.Conn, recvMsg msgs.ChatMsg) {
 
 	username := string(recvMsg.Payload)
 
+	var response msgs.ChatMsg
+
 	if !validUsername(username) {
-		// TODO: respond with error
+		response = msgs.ChatMsg{
+			Status: msgs.StatusInvalidUsername,
+		}
+		respond(conn, response)
+		return
 	}
 
-	var response msgs.ChatMsg
+	_, usernameExists := user2ip[username]
+	if usernameExists {
+		response = msgs.ChatMsg{
+			Status: msgs.StatusUsernameExists,
+		}
+		respond(conn, response)
+		return
+	}
+
 	ip2user[requestIP] = username
 	user2ip[username] = requestIP
 	response = msgs.ChatMsg{
@@ -127,6 +145,34 @@ func list(conn net.Conn) {
 		Payload: []byte(payload),
 	}
 	respond(conn, response)
+
+	// Get requesting IP and username and write log
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+	username := ip2user[requestIP]
+	log.Printf("(%s) %s requested a list of all rooms\n", requestIP, username)
+}
+
+func listUsers(conn net.Conn, recvMsg msgs.ChatMsg) {
+	var response msgs.ChatMsg
+
+	roomName := string(recvMsg.Payload)
+	r, roomExists := rooms[roomName]
+	if !roomExists {
+		response.Status = msgs.StatusInexistentRoom
+		respond(conn, response)
+		return
+	}
+
+	response.Status = msgs.StatusOK
+	response.Payload = r.ListUsers()
+	respond(conn, response)
+
+	// Get requesting IP and username and write log
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+	username := ip2user[requestIP]
+	log.Printf("(%s) %s requested a list of the users in %s\n", requestIP, username, roomName)
 }
 
 func join(conn net.Conn, recvMsg msgs.ChatMsg) {
@@ -147,7 +193,7 @@ func join(conn net.Conn, recvMsg msgs.ChatMsg) {
 	response.Status = msgs.StatusOK
 	respond(conn, response)
 	username := ip2user[requestIP]
-	log.Printf("%s (%s) joined %s\n", username, requestIP, roomName)
+	log.Printf("(%s) %s joined %s\n", requestIP, username, roomName)
 }
 
 func postMsg(conn net.Conn, recvMsg msgs.ChatMsg) {
@@ -168,7 +214,7 @@ func postMsg(conn net.Conn, recvMsg msgs.ChatMsg) {
 	}
 	respond(conn, response)
 	username := ip2user[requestIP]
-	log.Printf("%s (%s) posted %s\n", username, requestIP, string(recvMsg.Payload))
+	log.Printf("(%s) %s posted %s\n", requestIP, username, string(recvMsg.Payload))
 }
 
 func fetch(conn net.Conn, recvMsg msgs.ChatMsg) {
@@ -196,7 +242,7 @@ func fetch(conn net.Conn, recvMsg msgs.ChatMsg) {
 	respond(conn, response)
 	if fromIdx != nextIdx {
 		username := ip2user[requestIP]
-		log.Printf("%s (%s) got %s room's messages from %d up to message number %d\n", username, requestIP, roomName, fromIdx, nextIdx)
+		log.Printf("(%s) %s got %s room's messages from %d up to message number %d\n", requestIP, username, roomName, fromIdx, nextIdx)
 	}
 }
 
@@ -242,7 +288,7 @@ func leave(conn net.Conn) {
 	respond(conn, response)
 
 	username := ip2user[requestIP]
-	log.Printf("%s (%s) left %s room\n", username, requestIP, roomName)
+	log.Printf("(%s) %s left %s room\n", requestIP, username, roomName)
 }
 
 func createRoom(conn net.Conn, recvMsg msgs.ChatMsg) {
@@ -263,12 +309,45 @@ func createRoom(conn net.Conn, recvMsg msgs.ChatMsg) {
 		rooms[roomName].users = make(map[string]struct{})
 		response.Status = msgs.StatusOK
 		username := ip2user[requestIP]
-		log.Printf("%s (%s) created a new room named %s\n", username, requestIP, roomName)
+		log.Printf("(%s) %s created a new room named %s\n", requestIP, username, roomName)
 	} else {
 		response.Status = msgs.StatusRoomAlreadyExists
 	}
 
 	respond(conn, response)
+}
+
+func deleteRoom(conn net.Conn, recvMsg msgs.ChatMsg) {
+	// Get requesting IP
+	requestAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	requestIP := requestAddr[0]
+
+	roomName := string(recvMsg.Payload)
+
+	var response msgs.ChatMsg
+
+	// Check if room exists
+	r, roomExists := rooms[roomName]
+	if !roomExists {
+		response.Status = msgs.StatusInexistentRoom
+		respond(conn, response)
+		return
+	}
+
+	// Check if room is empty
+	if !r.Empty() {
+		response.Status = msgs.StatusRoomNotEmpty
+		respond(conn, response)
+		return
+	}
+
+	delete(rooms, roomName)
+
+	response.Status = msgs.StatusOK
+	respond(conn, response)
+
+	username := ip2user[requestIP]
+	log.Printf("(%s) %s deleted empty room named %s\n", requestIP, username, roomName)
 }
 
 func logout(conn net.Conn) {
@@ -292,7 +371,7 @@ func logout(conn net.Conn) {
 		Status: msgs.StatusOK,
 	}
 	respond(conn, response)
-	log.Printf("%s (%s) logged out", username, requestIP)
+	log.Printf("(%s) %s logged out", requestIP, username)
 }
 
 func respond(conn net.Conn, response msgs.ChatMsg) {
